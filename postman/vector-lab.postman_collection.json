@@ -1,0 +1,480 @@
+{
+  "info": {
+    "name": "Vector Index Consistency Lab",
+    "description": "Test race condition và các solutions",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "env",
+      "value": "local" 
+    },
+    {
+      "key": "solution",
+      "value": "baseline"
+    },
+    {
+      "key": "delayMs",
+      "value": "10000"
+    },
+    {
+      "key": "uuid",
+      "value": "doc-001"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Setup",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          }
+        },
+        {
+          "name": "Reset Collection",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/reset"
+          }
+        }
+      ]
+    },
+    {
+      "name": "0. Podman Commands (Docs)",
+      "item": [
+        {
+          "name": "Run Tests (Podman VM)",
+          "request": { "method": "GET", "url": "https://example.invalid" },
+          "description": "Run in terminal: make test-podman-vm"
+        },
+        {
+          "name": "Run Tests (Podman Host)",
+          "request": { "method": "GET", "url": "https://example.invalid" },
+          "description": "Run in terminal: make test-podman-host"
+        },
+        {
+          "name": "Run Tests (Compose Service)",
+          "request": { "method": "GET", "url": "https://example.invalid" },
+          "description": "Run in terminal: make test-compose"
+        }
+      ]
+    },
+    {
+      "name": "2. Basic Operations",
+      "item": [
+        {
+          "name": "Index Document",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/documents/pump-001/reindex?solution={{solution}}",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Pump Model X100 Specifications:\\n- Flow rate: 500 L/min\\n- Pressure: 10 bar\\n- Material: Stainless steel\\n\\nInstallation instructions...\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Search Documents",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/search?solution={{solution}}",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"pump flow rate specifications\",\n  \"limit\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Document Chunks",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/documents/pump-001/chunks"
+          }
+        }
+        ,
+        {
+          "name": "Get Document Summary",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/documents/pump-001/summary"
+          },
+          "description": "Tóm tắt document: số chunks, trạng thái, metadata"
+        }
+      ]
+    },
+    {
+      "name": "3. Race Condition Demo",
+      "item": [
+        {
+          "name": "Step 1: Index Initial Document",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/documents/race-test-001/reindex?solution=baseline",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Original pump specifications. Model A100. Important safety information.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Step 2: Verify Document Exists",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/search?solution=baseline",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"pump safety\",\n  \"limit\": 5\n}"
+            }
+          }
+        },
+        {
+          "name": "Step 3: Start Slow Reindex (Delay {{delayMs}}ms)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/documents/race-test-001/reindex?solution=baseline&simulateDelay={{delayMs}}",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Updated pump specifications. Model B200. New safety guidelines.\"\n}"
+            },
+            "description": "Ngay sau khi gọi này, NHANH CHÓNG chạy Step 4!"
+          }
+        },
+        {
+          "name": "Step 4: Query During Reindex (RACE!)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/search?solution=baseline",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"pump safety\",\n  \"limit\": 5\n}"
+            },
+            "description": "Chạy NGAY sau Step 3 để thấy race condition!"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Solution Comparison",
+      "item": [
+        {
+          "name": "Test Baseline",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/benchmark/single?solution=baseline",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"bench-001\",\n  \"queryIntervalMs\": 50,\n  \"reindexDelayMs\": 1000\n}"
+            }
+          }
+        },
+        {
+          "name": "Test Blue-Green",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/benchmark/single?solution=blue-green",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"bench-002\",\n  \"queryIntervalMs\": 50,\n  \"reindexDelayMs\": 1000\n}"
+            }
+          }
+        },
+        {
+          "name": "Test Soft-Delete",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/benchmark/single?solution=soft-delete",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"bench-003\",\n  \"queryIntervalMs\": 50,\n  \"reindexDelayMs\": 1000\n}"
+            }
+          }
+        },
+        {
+          "name": "Test Locking",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/benchmark/single?solution=locking",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"bench-004\",\n  \"queryIntervalMs\": 50,\n  \"reindexDelayMs\": 1000\n}"
+            }
+          }
+        },
+        {
+          "name": "Compare All Solutions",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/benchmark/compare",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"solutions\": [\"baseline\", \"blue-green\", \"soft-delete\", \"locking\"],\n  \"iterations\": 5,\n  \"queryIntervalMs\": 30\n}"
+            }
+          }
+        },
+        {
+          "name": "Race Condition Demo",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/benchmark/race-demo",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"race-demo-001\",\n  \"reindexDelayMs\": 500\n}"
+            }
+          },
+          "description": "Programmatic race condition demonstration"
+        }
+      ]
+    },
+    {
+      "name": "5. Pipeline Simulation",
+      "item": [
+        {
+          "name": "Simulate Worker Reindex",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/simulate/worker-reindex",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uuid\": \"pump-manual-001\",\n  \"documentNumber\": \"PUMP-2024-001\",\n  \"content\": \"Pump specifications document content...\",\n  \"simulateProcessingTime\": true\n}"
+            },
+            "description": "Mô phỏng background worker reindex với processing delay"
+          }
+        },
+        {
+          "name": "Simulate User Query",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/simulate/user-query",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"pump specifications\",\n  \"documentNumbers\": [\"PUMP-2024-001\"]\n}"
+            },
+            "description": "Mô phỏng user search với filter document"
+          }
+        },
+        {
+          "name": "Simulate Batch Reindex",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/simulate/batch-reindex",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documents\": [\n    { \"uuid\": \"doc-001\", \"content\": \"...\" },\n    { \"uuid\": \"doc-002\", \"content\": \"...\" },\n    { \"uuid\": \"doc-003\", \"content\": \"...\" }\n  ],\n  \"concurrent\": true\n}"
+            },
+            "description": "Mô phỏng batch job reindex nhiều documents"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Recovery & Diagnostics",
+      "item": [
+        {
+          "name": "Get Stuck Documents",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/recovery/stuck-documents?thresholdMinutes=5"
+          },
+          "description": "Lấy danh sách documents đang bị stuck/orphan"
+        },
+        {
+          "name": "Get Stuck Locks",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/recovery/stuck-locks?thresholdMinutes=10"
+          },
+          "description": "Lấy danh sách locks bị stuck (cho Locking solution)"
+        },
+        {
+          "name": "Get Incomplete Blue-Green",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/recovery/incomplete-versions"
+          },
+          "description": "Lấy documents có nhiều versions (Blue-Green không hoàn thành)"
+        },
+        {
+          "name": "Cleanup Stuck Document",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/recovery/cleanup",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uuid\": \"orphan-doc-001\",\n  \"action\": \"clear_status\"\n}"
+            }
+          },
+          "description": "action: 'clear_status' hoặc 'force_delete'"
+        },
+        {
+          "name": "Force Release Lock",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/recovery/release-lock",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"locked-doc-001\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Run Startup Recovery",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/recovery/startup"
+          },
+          "description": "Chạy recovery process (thường tự động khi service start)"
+        }
+      ]
+    },
+    {
+      "name": "7. Priority Queue",
+      "item": [
+        {
+          "name": "Get Queue Status",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/queue/status"
+          },
+          "description": "Xem trạng thái queue và jobs theo priority"
+        },
+        {
+          "name": "Enqueue Reindex Job",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/queue/enqueue",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uuid\": \"new-doc-001\",\n  \"documentNumber\": \"DOC-2024-001\",\n  \"priority\": 3,\n  \"reason\": \"User request\"\n}"
+            }
+          },
+          "description": "priority: 1=CRITICAL, 2=HIGH, 3=NORMAL, 4=LOW"
+        },
+        {
+          "name": "Bump Priority",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/queue/bump-priority",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uuid\": \"doc-001\",\n  \"newPriority\": 1\n}"
+            }
+          },
+          "description": "Đẩy document lên đầu queue"
+        },
+        {
+          "name": "Get Job Position",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/queue/position/{{uuid}}"
+          }
+        },
+        {
+          "name": "Process Next Job (Manual)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/queue/process-next"
+          },
+          "description": "Manually trigger xử lý job tiếp theo"
+        }
+      ]
+    },
+    {
+      "name": "8. Admin",
+      "item": [
+        {
+          "name": "Get Metrics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/metrics"
+          }
+        },
+        {
+          "name": "List All Documents",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/documents"
+          }
+        },
+        {
+          "name": "Cleanup Old Jobs",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/cleanup?olderThanMinutes=30"
+          },
+          "description": "Xóa các job completed/failed cũ khỏi Redis theo thời gian"
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          }
+        }
+      ]
+    }
+  ]
+}

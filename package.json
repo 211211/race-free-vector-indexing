@@ -1,0 +1,23 @@
+{
+  "name": "vector-index-consistency-lab",
+  "version": "1.0.0",
+  "description": "Laboratory for demonstrating and solving race conditions in vector search systems",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "test": "bun test",
+    "test:race": "bun test test/race-condition.test.ts",
+    "test:queue": "bun test test/priority-queue.test.ts",
+    "setup": "bun run scripts/setup.ts",
+    "benchmark": "bun run src/benchmark/runner.ts",
+    "typecheck": "bun x tsc --noEmit"
+  },
+  "dependencies": {
+    "ioredis": "^5.3.2"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  }
+}

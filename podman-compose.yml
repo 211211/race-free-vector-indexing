@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  qdrant:
+    container_name: vector-lab-qdrant
+    image: docker.io/qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage:Z
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+
+  redis:
+    container_name: vector-lab-redis
+    image: docker.io/redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data:Z
+    command: redis-server --appendonly yes
+
+  # Ephemeral test runner attached to the same network
+  app-test:
+    container_name: vector-lab-app-test
+    image: docker.io/oven/bun:1.1
+    depends_on:
+      - qdrant
+      - redis
+    working_dir: /app
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./:/app:Z
+    command: ["bun", "test"]
+
+volumes:
+  qdrant_data:
+  redis_data:
